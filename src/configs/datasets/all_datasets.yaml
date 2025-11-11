@@ -1,7 +1,7 @@
 train:
     dreambooth:
         _target_: src.datasets.dreambooth.DreamBoothTrainDataset
-        data_path: /path/to/folder/with/images
+        data_path: /Users/danila/Downloads/bears
         placeholder_token: sks
         class_name: dog
         instance_transforms: ${transforms.instance_transforms.train}
@@ -9,6 +9,6 @@ train:
 val:
     db_liv_small:
       _target_: src.datasets.dreambooth.DreamBoothLivingSmall
-      data_path: /home/jovyan/bobkov/dreambooth/dataset/dog
+      data_path: /Users/danila/Downloads/bears2
       placeholder_token: sks
       class_name: dog

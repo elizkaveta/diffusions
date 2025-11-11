@@ -27,17 +27,27 @@ class LoraTrainer(BaseTrainer):
                 the dataloader (possibly transformed via batch transform),
                 model outputs, and losses.
         """
-        # model forward, backward, opt step and etc.
-        #
-        # TO DO 
-        # 
-        # model_output = ...
-        # batch.update(model_output)
-        # losses = ...
-        # batch.uodate(losses)
-        
+        self.model.train()
 
-        # update metrics for each loss (in case of multiple losses)
+        if self.batch_transforms is not None and "train" in self.batch_transforms:
+            batch = self.batch_transforms["train"](batch)
+
+        outputs = self.model(
+            pixel_values=batch["pixel_values"],
+            prompt=batch["prompt"],
+        )
+        batch.update(outputs)
+
+        losses = self.criterion(**{**batch, **outputs})
+        batch.update(losses)
+
+        self.optimizer.zero_grad(set_to_none=True)
+        losses["loss"].backward()
+        self._clip_grad_norm()
+        self.optimizer.step()
+        if self.lr_scheduler is not None:
+            self.lr_scheduler.step()
+
         for loss_name in self.config.writer.loss_names:
             batch[loss_name] = batch[loss_name].mean()
             train_metrics.update(loss_name, batch[loss_name].item())
@@ -46,17 +56,28 @@ class LoraTrainer(BaseTrainer):
 
     @torch.no_grad()
     def process_evaluation_batch(self, batch, eval_metrics):
-        # generate images via pipeline
-        # TO DO
-        # 
-        # generated_images = ...
-        # batch['generated'] = generated_images
+        self.model.eval()
+
+        if self.batch_transforms is not None and "val" in self.batch_transforms:
+            batch = self.batch_transforms["val"](batch)
+
+        gen_args = self.config.validation_args
+        images = self.pipe.generate(
+            prompts=batch["prompt"],
+            negative_prompt=gen_args.get("negative_prompt", None),
+            num_images_per_prompt=gen_args.get("num_images_per_prompt", 1),
+            num_inference_steps=gen_args.get("num_inference_steps", 30),
+            guidance_scale=gen_args.get("guidance_scale", 5.0),
+            height=gen_args.get("height", 1024),
+            width=gen_args.get("width", 1024),
+        )
+        batch["generated"] = images
 
         for metric in self.metrics:
             metric_result = metric(**batch)
             for k, v in metric_result.items():
                 eval_metrics.update(k, v)
-                
+
         return batch
         
     def _log_batch(self, batch_idx, batch, mode="train"):

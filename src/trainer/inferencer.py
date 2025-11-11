@@ -139,17 +139,28 @@ class BaseInferencer(BaseTrainer):
 class LoraInferencer(BaseInferencer):
     @torch.no_grad()
     def process_evaluation_batch(self, batch, eval_metrics):
-        # generate images via pipeline
-        # TO DO
-        # 
-        # generated_images = ...
-        # batch['generated'] = generated_images
-        
+        self.model.eval()
+
+        if self.batch_transforms is not None and "val" in self.batch_transforms:
+            batch = self.batch_transforms["val"](batch)
+
+        gen_args = self.config.validation_args if hasattr(self.config, "validation_args") else {}
+        generated_images = self.pipe.generate(
+            prompts=batch["prompt"],
+            negative_prompt=gen_args.get("negative_prompt", None),
+            num_images_per_prompt=gen_args.get("num_images_per_prompt", 1),
+            num_inference_steps=gen_args.get("num_inference_steps", 30),
+            guidance_scale=gen_args.get("guidance_scale", 5.0),
+            height=gen_args.get("height", 1024),
+            width=gen_args.get("width", 1024),
+        )
+        batch["generated"] = generated_images
+
         for metric in self.metrics:
             metric_result = metric(**batch)
             for k, v in metric_result.items():
                 eval_metrics.update(k, v)
 
         self.store_batch(generated_images, batch["prompt"])
-                
+
         return batch
